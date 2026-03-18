@@ -22,8 +22,7 @@ export const pandocTool = createTool({
     try {
       await fs.writeFile(tempMdPath, content);
 
-      // Astuce design : Tu pourras ajouter '--reference-doc=template.docx' 
-      // plus tard pour avoir des Word avec un style "Apple-like" minimaliste.
+      // Astuce design : Tu pourras ajouter '--reference-doc=template.docx'
       // Render.com compatible command using WeasyPrint for PDF generation
       const pdfEngine = format === 'pdf' ? '--pdf-engine=weasyprint' : '';
       const command = `pandoc ${tempMdPath} -o ${outputPath} ${pdfEngine}`;
