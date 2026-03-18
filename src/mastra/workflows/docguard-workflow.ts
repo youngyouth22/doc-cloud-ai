@@ -83,6 +83,8 @@ const categorizeDocumentStep = createStep({
       return { fileId, userId, markdown, categoryId: '00000000-0000-0000-0000-000000000000' }; 
     }
 
+    /* 
+    TEMPORARY MOCK FOR QUOTA ISSUES
     const result = await categorizationAgent.generate(
       `Categorize this document: ${markdown.substring(0, 2000)}`
     );
@@ -110,6 +112,10 @@ const categorizeDocumentStep = createStep({
       console.warn('[Categorization] No category ID found in agent response or tool results. Using fallback.');
       categoryId = '00000000-0000-0000-0000-000000000000'; // Fallback Uncategorized
     }
+    */
+
+    console.log(`[Workflow] MOCK Categorization: skipping AI to save quota. Using 'School Report Cards' fallback.`);
+    const categoryId = '3faa6296-0f8b-4256-9a51-f6edb390a7dc'; // School Report Cards
 
     return { fileId, userId, markdown, categoryId };
   }
