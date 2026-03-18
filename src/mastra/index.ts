@@ -20,6 +20,12 @@ export const mastra = new Mastra({
         requiresAuth: false,
         handler: async (c) => {
           try {
+            const apiKey = c.req.header('x-api-key');
+            if (apiKey !== process.env.MASTRA_WEBHOOK_SECRET) {
+              console.warn(`[Webhook] Unauthorized access attempt with API key: ${apiKey}`);
+              return c.text('Unauthorized', 401);
+            }
+
             const body = await c.req.json();
             
             // Supabase Webhook sends data in 'record'
