@@ -195,8 +195,8 @@ const uploadAndSyncStep = createStep({
 
     // 1. Upload des nouveaux fichiers vers Supabase Storage
     // On utilise storageName + suffixes pour garantir l'unicité réclamée par PowerSync
-    const wordKey = `${storageName}_word`;
-    const pdfProKey = `${storageName}_pro`;
+    const wordKey = `${storageName}`;
+    const pdfProKey = `${storageName}`;
     const mdKey = storageName; // Correspond à l'exemple du user (sans suffixe pour le MD)
 
     const wordPath = `${userId}/processed/${wordKey}.docx`;
