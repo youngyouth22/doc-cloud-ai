@@ -26,6 +26,22 @@ const extractMarkdownStep = createStep({
     console.log(`[Workflow] Processing file: ${filePath}`);
     if (error || !data?.signedUrl) {
       console.error(`[Workflow] Failed to generate signed URL for ${filePath}. Supabase error:`, error);
+      
+      // DEBUG: List files in the same folder to see what's actually there
+      try {
+        const { data: listData, error: listError } = await supabaseAdmin.storage
+          .from('documents')
+          .list(userId, { limit: 100 });
+        if (listData) {
+          console.log(`[Workflow] Files found in bucket 'documents' for user ${userId}:`, 
+            listData.map(f => f.name).join(', '));
+        } else if (listError) {
+          console.error(`[Workflow] Failed to list files in bucket 'documents' for user ${userId}:`, listError);
+        }
+      } catch (e) {
+        console.error(`[Workflow] Exception during file listing:`, e);
+      }
+
       throw new Error(`Impossible to generate signed URL: ${error?.message || 'Signed URL is null'}`);
     }
 
