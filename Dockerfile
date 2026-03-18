@@ -27,4 +27,4 @@ RUN npm run build
 EXPOSE 3000
 
 # Start the Koa server
-CMD ["node", "dist/server.js"]
+CMD ["npx", "tsx", "src/server.ts"]
