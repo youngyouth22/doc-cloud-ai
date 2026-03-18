@@ -13,6 +13,6 @@ export const categorizationAgent = new Agent({
     4. If NO existing category matches the document content well, use the categoryTool with action 'create' to create a new, concise category name (in English only, e.g., "Invoices", "Technical Manuals", "Legal Contracts") and return its new ID and Name.
     5. Always return the category ID and Name in your final response.
   `,
-  model: 'google/gemini-1.5-flash',
+  model: 'google/gemini-2.5-flash-lite',
   tools: { categoryTool },
 });
