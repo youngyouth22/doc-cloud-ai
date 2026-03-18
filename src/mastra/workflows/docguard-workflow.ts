@@ -17,7 +17,23 @@ const extractMarkdownStep = createStep({
   }),
   execute: async ({ inputData, requestContext }) => {
     const { fileId, userId } = inputData;
-    const filePath = `${userId}/${fileId}.pdf`;
+    
+    // 1. Fetch document record to get correct storage path (file_url + extension)
+    const { data: doc, error: docError } = await supabaseAdmin
+      .from('documents')
+      .select('file_url, file_extension')
+      .eq('id', fileId)
+      .single();
+
+    if (docError || !doc) {
+      console.error(`[Workflow] Document record ${fileId} not found:`, docError);
+      throw new Error(`Document record not found: ${docError?.message || 'Unknown error'}`);
+    }
+
+    // Fallback logic for path construction
+    const storageName = doc.file_url || fileId; // Support cases where file_url might be missing
+    const extension = doc.file_extension || 'pdf';
+    const filePath = `${userId}/${storageName}.${extension}`;
 
     const { data, error } = await supabaseAdmin.storage
       .from('documents')
