@@ -140,13 +140,22 @@ const convertFormatsStep = createStep({
   execute: async ({ inputData, requestContext }) => {
     const { fileId, userId, markdown, categoryId } = inputData;
     
-    // On génère le DOCX et le PDF pro via Pandoc
+    console.log(`[Workflow] Starting conversion for ${fileId} to docx and pdf...`);
+
+    // On génère le DOCX via Pandoc
+    console.log(`[Workflow] Generating DOCX...`);
     const docxResult: any = await pandocTool.execute!({ content: markdown, format: 'docx' }, { requestContext });
+    
+    // On génère le PDF pro via Pandoc
+    console.log(`[Workflow] Generating PDF Pro...`);
     const pdfProResult: any = await pandocTool.execute!({ content: markdown, format: 'pdf' }, { requestContext });
 
     if (!docxResult.success || !pdfProResult.success) {
-      throw new Error('Failed to convert document formats');
+      console.error(`[Workflow] Conversion failed. DOCX success: ${docxResult.success}, PDF success: ${pdfProResult.success}`);
+      throw new Error(`Failed to convert document formats: ${docxResult.error || pdfProResult.error || 'Unknown error'}`);
     }
+
+    console.log(`[Workflow] Conversion successful for ${fileId}`);
 
     return { 
       fileId,
@@ -175,22 +184,33 @@ const uploadAndSyncStep = createStep({
   execute: async ({ inputData }) => {
     const { fileId, userId, docxBuffer, pdfProBuffer, markdownText, categoryId } = inputData;
 
+    console.log(`[Workflow] Starting upload for ${fileId} (userId: ${userId})...`);
+
     // 1. Upload des nouveaux fichiers vers Supabase Storage
     const wordPath = `${userId}/processed/${fileId}.docx`;
     const pdfProPath = `${userId}/processed/${fileId}_pro.pdf`;
     const mdPath = `${userId}/processed/${fileId}.md`;
 
-    await Promise.all([
-      supabaseAdmin.storage.from('documents').upload(wordPath, docxBuffer),
-      supabaseAdmin.storage.from('documents').upload(pdfProPath, pdfProBuffer),
-      supabaseAdmin.storage.from('documents').upload(mdPath, Buffer.from(markdownText))
-    ]);
+    console.log(`[Workflow] Uploading files to bucket "documents": ${wordPath}, ${pdfProPath}, ${mdPath}...`);
+
+    try {
+      await Promise.all([
+        supabaseAdmin.storage.from('documents').upload(wordPath, docxBuffer, { upsert: true }),
+        supabaseAdmin.storage.from('documents').upload(pdfProPath, pdfProBuffer, { upsert: true }),
+        supabaseAdmin.storage.from('documents').upload(mdPath, Buffer.from(markdownText), { upsert: true })
+      ]);
+      console.log(`[Workflow] Upload successful for ${fileId}`);
+    } catch (err: any) {
+      console.error(`[Workflow] Upload failed for ${fileId}:`, err);
+      throw new Error(`Storage upload failed: ${err.message}`);
+    }
 
     // 2. Récupérer les URLs publiques
     const getUrl = (path: string) => supabaseAdmin.storage.from('documents').getPublicUrl(path).data.publicUrl;
 
     // 3. MISE À JOUR SQL (C'est ce que PowerSync va capter)
-    await supabaseAdmin
+    console.log(`[Workflow] Updating database record for doc ${fileId}...`);
+    const { error: updateError } = await supabaseAdmin
       .from('documents')
       .update({
         content_markdown: markdownText, // Le texte pour le offline immédiat
@@ -202,6 +222,13 @@ const uploadAndSyncStep = createStep({
         category_id: categoryId,
       })
       .eq('id', fileId);
+
+    if (updateError) {
+      console.error(`[Workflow] Final DB update failed: ${updateError.message}`);
+      throw new Error(`Database update failed: ${updateError.message}`);
+    }
+
+    console.log(`[Workflow] Pipeline completed successfully for ${fileId}`);
 
     return { success: true };
   }
