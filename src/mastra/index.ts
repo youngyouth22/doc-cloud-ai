@@ -14,6 +14,8 @@ export const mastra = new Mastra({
   agents: { weatherAgent, categorizationAgent },
   scorers: { toolCallAppropriatenessScorer, completenessScorer, translationScorer },
   server: {
+    port: Number(process.env.PORT) || 3000,
+    host: '0.0.0.0',
     apiRoutes: [
       registerApiRoute('/webhooks/supabase', {
         method: 'POST',
