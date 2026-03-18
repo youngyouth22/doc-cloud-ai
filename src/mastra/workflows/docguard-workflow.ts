@@ -19,14 +19,14 @@ const extractMarkdownStep = createStep({
     const { fileId, userId } = inputData;
     const filePath = `${userId}/${fileId}.pdf`;
 
-    const { data } = await supabaseAdmin.storage
+    const { data, error } = await supabaseAdmin.storage
       .from('documents')
       .createSignedUrl(filePath, 600);
 
     console.log(`[Workflow] Processing file: ${filePath}`);
-    if (!data?.signedUrl) {
-      console.error(`[Workflow] Failed to generate signed URL for ${filePath}`);
-      throw new Error('Impossible de générer l\'URL');
+    if (error || !data?.signedUrl) {
+      console.error(`[Workflow] Failed to generate signed URL for ${filePath}. Supabase error:`, error);
+      throw new Error(`Impossible to generate signed URL: ${error?.message || 'Signed URL is null'}`);
     }
 
     // 2. Appeler Datalab Marker
