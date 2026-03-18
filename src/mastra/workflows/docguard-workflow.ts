@@ -14,6 +14,7 @@ const extractMarkdownStep = createStep({
     fileId: z.string(),
     userId: z.string(),
     markdown: z.string(),
+    storageName: z.string(),
   }),
   execute: async ({ inputData, requestContext }) => {
     const { fileId, userId } = inputData;
@@ -54,7 +55,7 @@ const extractMarkdownStep = createStep({
       console.error(`[Workflow] Marker extraction failed: ${result.error}`);
       throw new Error(result.error || 'Failed to extract markdown');
     }
-    return { fileId, userId, markdown: result.markdown };
+    return { fileId, userId, markdown: result.markdown, storageName };
   }
 });
 
@@ -64,15 +65,17 @@ const categorizeDocumentStep = createStep({
     fileId: z.string(),
     userId: z.string(),
     markdown: z.string(),
+    storageName: z.string(),
   }),
   outputSchema: z.object({
     fileId: z.string(),
     userId: z.string(),
     markdown: z.string(),
     categoryId: z.string(),
+    storageName: z.string(),
   }),
   execute: async ({ inputData }) => {
-    const { fileId, userId, markdown } = inputData;
+    const { fileId, userId, markdown, storageName } = inputData;
 
     // Sauvegarde de quota : Si le markdown est vide ou trop court, on ne sollicite pas l'IA
     if (!markdown || markdown.trim().length < 10) {
@@ -80,7 +83,7 @@ const categorizeDocumentStep = createStep({
       
       // On peut soit lever une erreur, soit assigner une catégorie par défaut "Uncategorized"
       // Pour éviter de bloquer le workflow, cherchons une catégorie par défaut ou retournons vide
-      return { fileId, userId, markdown, categoryId: '00000000-0000-0000-0000-000000000000' }; 
+      return { fileId, userId, markdown, categoryId: '00000000-0000-0000-0000-000000000000', storageName }; 
     }
 
     /* 
@@ -117,7 +120,7 @@ const categorizeDocumentStep = createStep({
     console.log(`[Workflow] MOCK Categorization: skipping AI to save quota. Using 'School Report Cards' fallback.`);
     const categoryId = '3faa6296-0f8b-4256-9a51-f6edb390a7dc'; // School Report Cards
 
-    return { fileId, userId, markdown, categoryId };
+    return { fileId, userId, markdown, categoryId, storageName };
   }
 });
 
@@ -128,6 +131,7 @@ const convertFormatsStep = createStep({
     userId: z.string(),
     markdown: z.string(),
     categoryId: z.string(),
+    storageName: z.string(),
   }),
   outputSchema: z.object({
     fileId: z.string(),
@@ -136,9 +140,10 @@ const convertFormatsStep = createStep({
     pdfProBuffer: z.instanceof(Buffer),
     markdownText: z.string(),
     categoryId: z.string(),
+    storageName: z.string(),
   }),
   execute: async ({ inputData, requestContext }) => {
-    const { fileId, userId, markdown, categoryId } = inputData;
+    const { fileId, userId, markdown, categoryId, storageName } = inputData;
     
     console.log(`[Workflow] Starting conversion for ${fileId} to docx and pdf...`);
 
@@ -163,7 +168,8 @@ const convertFormatsStep = createStep({
       docxBuffer: docxResult.buffer, 
       pdfProBuffer: pdfProResult.buffer, 
       markdownText: markdown,
-      categoryId
+      categoryId,
+      storageName
     };
   }
 });
@@ -177,19 +183,25 @@ const uploadAndSyncStep = createStep({
     pdfProBuffer: z.instanceof(Buffer),
     markdownText: z.string(),
     categoryId: z.string(),
+    storageName: z.string(),
   }),
   outputSchema: z.object({
     success: z.boolean(),
   }),
   execute: async ({ inputData }) => {
-    const { fileId, userId, docxBuffer, pdfProBuffer, markdownText, categoryId } = inputData;
+    const { fileId, userId, docxBuffer, pdfProBuffer, markdownText, categoryId, storageName } = inputData;
 
-    console.log(`[Workflow] Starting upload for ${fileId} (userId: ${userId})...`);
+    console.log(`[Workflow] Starting upload for ${fileId} (userId: ${userId}, storageName: ${storageName})...`);
 
     // 1. Upload des nouveaux fichiers vers Supabase Storage
-    const wordPath = `${userId}/processed/${fileId}.docx`;
-    const pdfProPath = `${userId}/processed/${fileId}_pro.pdf`;
-    const mdPath = `${userId}/processed/${fileId}.md`;
+    // On utilise storageName + suffixes pour garantir l'unicité réclamée par PowerSync
+    const wordKey = `${storageName}_word`;
+    const pdfProKey = `${storageName}_pro`;
+    const mdKey = storageName; // Correspond à l'exemple du user (sans suffixe pour le MD)
+
+    const wordPath = `${userId}/processed/${wordKey}.docx`;
+    const pdfProPath = `${userId}/processed/${pdfProKey}.pdf`;
+    const mdPath = `${userId}/processed/${mdKey}.md`;
 
     console.log(`[Workflow] Uploading files to bucket "documents": ${wordPath}, ${pdfProPath}, ${mdPath}...`);
 
@@ -205,18 +217,16 @@ const uploadAndSyncStep = createStep({
       throw new Error(`Storage upload failed: ${err.message}`);
     }
 
-    // 2. Récupérer les URLs publiques
-    const getUrl = (path: string) => supabaseAdmin.storage.from('documents').getPublicUrl(path).data.publicUrl;
 
     // 3. MISE À JOUR SQL (C'est ce que PowerSync va capter)
-    console.log(`[Workflow] Updating database record for doc ${fileId}...`);
+    console.log(`[Workflow] Updating database record for doc ${fileId} with format-specific storage IDs...`);
     const { error: updateError } = await supabaseAdmin
       .from('documents')
       .update({
-        content_markdown: markdownText, // Le texte pour le offline immédiat
-        file_url_word: getUrl(wordPath),
-        file_url_pdf_pro: getUrl(pdfProPath),
-        file_url_md: getUrl(mdPath),
+        extracted_content: markdownText, // Le texte pour le offline immédiat
+        file_url_word: wordKey, // ID sans extension (ex: original_word)
+        file_url_pdf_pro: pdfProKey, // ID sans extension (ex: original_pro)
+        file_url_markdown: mdKey, // ID sans extension (ex: original)
         status: 'completed', // Trigger le téléchargement sur Flutter
         ai_processed: true,
         category_id: categoryId,
