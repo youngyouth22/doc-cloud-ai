@@ -26,5 +26,5 @@ RUN npm run build
 # Expose the application port
 EXPOSE 3000
 
-# Start the application
-CMD ["node", ".mastra/output/index.mjs"]
+# Start the Koa server
+CMD ["node", "dist/server.js"]
