@@ -31,47 +31,24 @@ const extractMarkdownStep = createStep({
       throw new Error(`Document record not found: ${docError?.message || 'Unknown error'}`);
     }
 
-    // Robust path construction
-    const storageName = doc.file_url || fileId;
+    // Fallback logic for path construction
+    const storageName = doc.file_url || fileId; // Support cases where file_url might be missing
     const extension = doc.file_extension || 'pdf';
-    
-    // 1. Determine base path (avoid double userId if already present)
-    let filePath = storageName.includes('/') ? storageName : `${userId}/${storageName}`;
-    
-    // 2. Determine extension (avoid double extension)
-    if (!filePath.toLowerCase().endsWith(`.${extension.toLowerCase()}`)) {
-      filePath = `${filePath}.${extension}`;
-    }
+    const filePath = `${userId}/${storageName}.${extension}`;
 
-    console.log(`[Workflow] Attempting to generate signed URL for: ${filePath} (Bucket: documents)`);
-
-    let { data, error } = await supabaseAdmin.storage
+    const { data, error } = await supabaseAdmin.storage
       .from('documents')
       .createSignedUrl(filePath, 600);
 
-    // Fallback: Try without userId folder if not found
-    if ((error || !data?.signedUrl) && !storageName.includes('/')) {
-      console.warn(`[Workflow] File not found at ${filePath}. Trying fallback at root...`);
-      const fallbackPath = `${storageName}.${extension}`;
-      const fallbackResult = await supabaseAdmin.storage
-        .from('documents')
-        .createSignedUrl(fallbackPath, 600);
-      
-      if (fallbackResult.data?.signedUrl) {
-        console.log(`[Workflow] Fallback success: Found at ${fallbackPath}`);
-        data = fallbackResult.data;
-        error = fallbackResult.error as any;
-      }
-    }
-
+    console.log(`[Workflow] Processing file: ${filePath}`);
     if (error || !data?.signedUrl) {
-      console.error(`[Workflow] Failed to generate signed URL. Supabase error:`, error);
+      console.error(`[Workflow] Failed to generate signed URL for ${filePath}. Supabase error:`, error);
       throw new Error(`Impossible to generate signed URL: ${error?.message || 'Signed URL is null'}`);
     }
 
     // 2. Appeler Datalab Marker
     console.log(`[Workflow] Calling Marker tool with signed URL...`);
-    const result: any = await markerTool.execute!({ fileUrl: data!.signedUrl }, { requestContext });
+    const result: any = await markerTool.execute!({ fileUrl: data.signedUrl }, { requestContext });
     console.log(`[Workflow] Marker result success: ${result.success}, markdown length: ${result.markdown?.length || 0}`);
     
     if (!result.success) {
