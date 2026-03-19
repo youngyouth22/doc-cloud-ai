@@ -23,6 +23,6 @@ export const categorizationAgent = new Agent({
     - CATEGORY_NAME: [The name of the category in English]
     - DOCUMENT_NAME: [The highly descriptive name you generated in English]
   `,
-  model: 'google/gemini-2.0-flash',
-  tools: { categoryTool },
+  model: 'google/gemini-2.5-flash',
+  tools: { categoryTool }, 
 });
