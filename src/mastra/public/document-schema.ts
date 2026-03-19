@@ -6,8 +6,8 @@ import { z } from 'zod';
  */
 export const DocumentSchema = z.object({
   // 1. LOGIQUE MÉTIER
-  report_type: z.enum(["LOST", "FOUND", "PERSONAL_VAULT"])
-    .describe("The context: is it for the personal vault or a lost/found report?"),
+  report_type: z.string()
+    .describe("The context or descriptive name of the document"),
   
   doc_category: z.enum([
     "NATIONAL_ID", "PASSPORT", "DRIVERS_LICENSE", 

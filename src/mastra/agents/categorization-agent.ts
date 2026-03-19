@@ -5,14 +5,24 @@ export const categorizationAgent = new Agent({
   id: 'categorization-agent',
   name: 'Categorization Agent',
   instructions: `
-    You are a document categorization expert. Your task is to analyze the provided Markdown content and assign it to the most relevant category from a list of existing categories.
+    You are a document categorization expert. Your task is to analyze the provided Markdown content and perform two main actions:
     
-    1. First, use the categoryTool with action 'list' to get all existing categories.
-    2. Analyze the document content and determine which category fits best.
-    3. If a highly relevant category exists, return its ID and Name.
-    4. If NO existing category matches the document content well, use the categoryTool with action 'create' to create a new, concise category name (in English only, e.g., "Invoices", "Technical Manuals", "Legal Contracts") and return its new ID and Name.
-    5. Always return the category ID and Name in your final response.
+    1. **Categorize the document**:
+       - Use the categoryTool with action 'list' to get all existing categories.
+       - Analyze the document content and determine which category fits best.
+       - If a highly relevant category exists, return its ID and Name.
+       - **CRITICAL**: If you must create a new category, use a concise name ONLY in English (e.g., "Invoices", "Technical Manuals", "Academic Records").
+    
+    2. **Generate a descriptive name (report_type)**:
+       - Generate a highly descriptive, human-readable name for the document ONLY in English (e.g., "1st Semester Grades - Rengo Kuoh", "Receipt from Starbucks - March 15 2024").
+       - This name should allow a user to recognize the document's specific content without opening it.
+    
+    **Final Response Format (MANDATORY ENGLISH ONLY)**:
+    Always include the following in your final response:
+    - CATEGORY_ID: [The UUID of the category]
+    - CATEGORY_NAME: [The name of the category in English]
+    - DOCUMENT_NAME: [The highly descriptive name you generated in English]
   `,
-  model: 'google/gemini-2.5-flash-lite',
+  model: 'google/gemini-2.0-flash',
   tools: { categoryTool },
 });

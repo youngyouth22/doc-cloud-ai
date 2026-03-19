@@ -72,6 +72,7 @@ const categorizeDocumentStep = createStep({
     userId: z.string(),
     markdown: z.string(),
     categoryId: z.string(),
+    reportType: z.string(),
     storageName: z.string(),
   }),
   execute: async ({ inputData }) => {
@@ -83,44 +84,46 @@ const categorizeDocumentStep = createStep({
       
       // On peut soit lever une erreur, soit assigner une catégorie par défaut "Uncategorized"
       // Pour éviter de bloquer le workflow, cherchons une catégorie par défaut ou retournons vide
-      return { fileId, userId, markdown, categoryId: '00000000-0000-0000-0000-000000000000', storageName }; 
+      return { fileId, userId, markdown, categoryId: '00000000-0000-0000-0000-000000000000', reportType: 'Scanned Document', storageName }; 
     }
 
-    /* 
-    TEMPORARY MOCK FOR QUOTA ISSUES
+    // 1. Appeler l'agent de catégorisation
     const result = await categorizationAgent.generate(
-      `Categorize this document: ${markdown.substring(0, 2000)}`
+      `Categorize this document and generate a descriptive name: ${markdown.substring(0, 4000)}`
     );
 
-    // Extraction robuste : on regarde d'abord les résultats des outils
+    // 2. Extraction du categoryId
     let categoryId = '';
-    
-    // On cherche le résultat de l'outil 'category-manager'
-    const toolResults = result.toolResults as any[];
+    const toolResults = (result as any).toolResults as any[];
     const categoryToolResult = toolResults?.find(r => r.toolName === 'category-manager');
     
-    if (categoryToolResult?.result) {
-      if (categoryToolResult.result.category?.id) {
-        categoryId = categoryToolResult.result.category.id; // Cas 'create'
-      }
+    if (categoryToolResult?.result?.category?.id) {
+      categoryId = categoryToolResult.result.category.id;
     }
 
-    // Fallback : recherche par Regex dans le texte final de l'agent
     if (!categoryId) {
       const categoryIdMatch = result.text.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
       categoryId = categoryIdMatch ? categoryIdMatch[0] : '';
     }
 
-    if (!categoryId) {
-      console.warn('[Categorization] No category ID found in agent response or tool results. Using fallback.');
-      categoryId = '00000000-0000-0000-0000-000000000000'; // Fallback Uncategorized
+    // 3. Extraction du reportType (DOCUMENT_NAME)
+    let reportType = '';
+    const documentNameMatch = result.text.match(/DOCUMENT_NAME:\s*(.+)/i);
+    if (documentNameMatch && documentNameMatch[1]) {
+      reportType = documentNameMatch[1].trim();
     }
-    */
 
-    console.log(`[Workflow] MOCK Categorization: skipping AI to save quota. Using 'School Report Cards' fallback.`);
-    const categoryId = '3faa6296-0f8b-4256-9a51-f6edb390a7dc'; // School Report Cards
+    // Fallbacks
+    if (!categoryId) {
+      console.warn('[Categorization] No category ID found. Using fallback.');
+      categoryId = '00000000-0000-0000-0000-000000000000';
+    }
 
-    return { fileId, userId, markdown, categoryId, storageName };
+      reportType = 'Unnamed Document'; // Generic English fallback
+
+    console.log(`[Workflow] Categorization result: categoryId=${categoryId}, reportType="${reportType}"`);
+
+    return { fileId, userId, markdown, categoryId, reportType, storageName };
   }
 });
 
@@ -131,6 +134,7 @@ const convertFormatsStep = createStep({
     userId: z.string(),
     markdown: z.string(),
     categoryId: z.string(),
+    reportType: z.string(),
     storageName: z.string(),
   }),
   outputSchema: z.object({
@@ -140,10 +144,11 @@ const convertFormatsStep = createStep({
     pdfProBuffer: z.instanceof(Buffer),
     markdownText: z.string(),
     categoryId: z.string(),
+    reportType: z.string(),
     storageName: z.string(),
   }),
   execute: async ({ inputData, requestContext }) => {
-    const { fileId, userId, markdown, categoryId, storageName } = inputData;
+    const { fileId, userId, markdown, categoryId, reportType, storageName } = inputData;
     
     console.log(`[Workflow] Starting conversion for ${fileId} to docx and pdf...`);
 
@@ -169,6 +174,7 @@ const convertFormatsStep = createStep({
       pdfProBuffer: pdfProResult.buffer, 
       markdownText: markdown,
       categoryId,
+      reportType,
       storageName
     };
   }
@@ -183,21 +189,20 @@ const uploadAndSyncStep = createStep({
     pdfProBuffer: z.instanceof(Buffer),
     markdownText: z.string(),
     categoryId: z.string(),
+    reportType: z.string(),
     storageName: z.string(),
   }),
   outputSchema: z.object({
     success: z.boolean(),
   }),
   execute: async ({ inputData }) => {
-    const { fileId, userId, docxBuffer, pdfProBuffer, markdownText, categoryId, storageName } = inputData;
+    const { fileId, userId, docxBuffer, pdfProBuffer, markdownText, categoryId, reportType, storageName } = inputData;
 
     console.log(`[Workflow] Starting upload for ${fileId} (userId: ${userId}, storageName: ${storageName})...`);
 
-    // 1. Upload des nouveaux fichiers vers Supabase Storage
-    // On utilise storageName + suffixes pour garantir l'unicité réclamée par PowerSync
     const wordKey = `${storageName}`;
     const pdfProKey = `${storageName}`;
-    const mdKey = storageName; // Correspond à l'exemple du user (sans suffixe pour le MD)
+    const mdKey = storageName;
 
     const wordPath = `${userId}/processed/${wordKey}.docx`;
     const pdfProPath = `${userId}/processed/${pdfProKey}.pdf`;
@@ -230,6 +235,7 @@ const uploadAndSyncStep = createStep({
         status: 'completed', // Trigger le téléchargement sur Flutter
         ai_processed: true,
         category_id: categoryId,
+        report_type: reportType,
       })
       .eq('id', fileId);
 
